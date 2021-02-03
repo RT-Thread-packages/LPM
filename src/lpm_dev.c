@@ -12,6 +12,8 @@
 
 extern struct lpm lpm;
 
+#include "x_mem.h"
+
 struct lpm_dev *lpm_dev_find(const char *dev_name)
 {
     rt_slist_t *node = RT_NULL;

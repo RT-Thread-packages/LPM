@@ -14,8 +14,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <x_mem.h>
 #include <rtthread.h>
+
+#include "x_mem.h"
 
 struct heap_mem
 {
