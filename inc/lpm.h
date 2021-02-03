@@ -25,16 +25,9 @@ struct lpm_partition /* 分区结构 */
     char name[LPM_NAME_MAX];
     uint32_t size;  //分配了多少个block
     uint32_t offset;  //相对于存储设备是第几个block
-//    struct rt_device_blk_geometry blk_geometry; // block 的信息
     rt_slist_t list;
     struct lpm_dev *dev; /* 所属存储设备 */
 };
-//struct rt_device_blk_geometry
-//{
-//    rt_uint32_t sector_count;                           /**< count of sectors */
-//    rt_uint32_t bytes_per_sector;                       /**< number of bytes per sector */
-//    rt_uint32_t block_size;                             /**< number of bytes to erase one block */
-//};
 
 /* 物理存储设备数据结构*/
 /* 支持三种底层存储设备，RTT Block 设备、MTD Nand 设备、通用存储设备：struct lpm_dev */

@@ -140,18 +140,18 @@ static int lpm_check_crc(const struct lpm_super_block *lpm_sup, uint32_t block_s
     {
         rt_kprintf("Low memory!\n");
     }
-    rt_memcpy(lpm_sup_check, lpm_sup, block_size);//鎶婃暟鎹嫹璐濆埌 lpm_sup_check 涓�
+    rt_memcpy(lpm_sup_check, lpm_sup, block_size);//把数据拷贝到 lpm_sup_check 中
 
-    len = sizeof(struct lpm_part_info); //璁＄畻鍗曚釜缁撴瀯浣撶殑闀垮害
+    len = sizeof(struct lpm_part_info); //计算单个结构体的长度
 
-    len = len * lpm_sup->part_num;  //璁＄畻鍑� num 涓垎鍖虹粨鏋勪綋鐨勯暱搴�
+    len = len * lpm_sup->part_num;  //计算出 num 个分区结构体的长度
 
-    //璁＄畻鍑� lpm_sup 鐨勫疄闄呴暱搴�
+    //计算出 lpm_sup 的实际长度
     len += sizeof(struct lpm_super_block); // magic_word1 + magic_word2 + lpm_ver + part_num + status
 
-    lpm_sup_check = lpm_create_crc(lpm_sup_check, len); //閲嶆柊姹傚嚭 CRC
+    lpm_sup_check = lpm_create_crc(lpm_sup_check, len); //重新求出 CRC
 
-    if((rt_memcmp(lpm_sup, lpm_sup_check, len + 2)) != 0) //瀵规瘮 CRC
+    if((rt_memcmp(lpm_sup, lpm_sup_check, len + 2)) != 0) //对比 CRC
     {
         rt_kprintf("crc check failed! \r\n");
         rt_free(lpm_sup_check);
@@ -163,7 +163,7 @@ static int lpm_check_crc(const struct lpm_super_block *lpm_sup, uint32_t block_s
     return RT_EOK;
 }
 
-/* 浠庡瓨鍌ㄨ澶囦笂鍔犺浇鍒嗗尯淇℃伅 */
+/* 从存储设备上加载分区信息 */
 int lpm_part_info_load(struct lpm_dev *dev)
 {
     struct lpm_super_block *lpm_sup, *lpm_sup1, *lpm_sup2;
@@ -172,14 +172,14 @@ int lpm_part_info_load(struct lpm_dev *dev)
 
     RT_ASSERT(dev);
 
-    //璇诲彇鏍￠獙 绗竴涓秴绾у潡
+    //读取校验 第一个超级块
     lpm_sup1 = rt_malloc(dev->block_size);
     if (lpm_sup1 == RT_NULL)
     {
         return -RT_ERROR;
     }
 
-    //todo read 鍜� write 鐨勬椂鍊欐渶鍚庝竴涓� size  鏄� sector 鐨勫ぇ灏忥紝鑰屼笉鏄竴涓猙lock 澶у皬锛岃繖閲岀壒娈婂湪浜巄lock 鍜� sector 涓�鏍峰ぇ
+    //todo read 和 write 的时候最后一个 size  是 sector 的大小，而不是一个block 大小，这里特殊在于block 和 sector 一样大
     dev->ops->read(dev, 0, (uint8_t*)lpm_sup1, 1);
 
     if ((lpm_sup1->magic_word1 == magic_word1) && (lpm_sup1->magic_word2 == magic_word2))
@@ -189,26 +189,26 @@ int lpm_part_info_load(struct lpm_dev *dev)
             rt_kprintf("lpm_sup1 crc check failed! \r\n");
             rt_free(lpm_sup1);
 
-            res |= 1 << 0; //bit0 缃�1 缁欎竴涓� sup1 閿欒鏍囧織浣�
+            res |= 1 << 0; //bit0 置1 给一个 sup1 错误标志位
         }
     }
     else
     {
         rt_free(lpm_sup1);
 
-        res |= 1 << 0; //bit0 缃�1 缁欎竴涓� sup1 閿欒鏍囧織浣�
+        res |= 1 << 0; //bit0 置1 给一个 sup1 错误标志位
     }
 
-    //璇诲彇鏍￠獙 绗簩涓秴绾у潡
+    //读取校验 第二个超级块
     lpm_sup2 = rt_malloc(dev->block_size);
     if (lpm_sup2 == RT_NULL)
     {
-        //鐢宠涓嶅埌鍐呭瓨
-        res |= 1 << 1; //bit1 缃�1 缁欎竴涓� sup2 閿欒鏍囧織浣�
+        //申请不到内存
+        res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
     }
     else
     {
-        //todo read 鍜� write 鐨勬椂鍊欐渶鍚庝竴涓� size  鏄� sector 鐨勫ぇ灏忥紝鑰屼笉鏄竴涓猙lock 澶у皬锛岃繖閲岀壒娈婂湪浜巄lock 鍜� sector 涓�鏍峰ぇ
+        //todo read 和 write 的时候最后一个 size  是 sector 的大小，而不是一个block 大小，这里特殊在于block 和 sector 一样大
         dev->ops->read(dev, 1, (uint8_t*)lpm_sup2, 1);
 
         if ((lpm_sup2->magic_word1 == magic_word1) && (lpm_sup2->magic_word2 == magic_word2))
@@ -218,46 +218,46 @@ int lpm_part_info_load(struct lpm_dev *dev)
                 rt_kprintf("lpm_sup2 crc check failed! \r\n");
                 rt_free(lpm_sup2);
 
-                res |= 1 << 1; //bit1 缃�1 缁欎竴涓� sup2 閿欒鏍囧織浣�
+                res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
             }
         }
         else
         {
             rt_free(lpm_sup2);
 
-            res |= 1 << 1; //bit1 缃�1 缁欎竴涓� sup2 閿欒鏍囧織浣�
+            res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
         }
     }
 
-    if(res == 3)//bit0:1 閮戒负1 灏辫鏄庯紝瓒呯骇鍧�1鍜�2 閮芥病鏈夎褰曞垎鍖轰俊鎭�
+    if(res == 3)//bit0:1 都为1 就说明，超级块1和2 都没有记录分区信息
     {
         return -RT_ERROR;
     }
-    else if(res == 0x01 ){ // 瓒呯骇鍧�1 鍑虹幇閿欒
+    else if(res == 0x01 ){ // 超级块1 出现错误
         lpm_sup = lpm_sup2;
 
-        infopart = 1; //褰撳墠淇℃伅鍌ㄥ瓨鍦� 瓒呯骇鍧�1锛屼笅涓�娆″氨瑕佸啓鍦� 瓒呯骇鍧�0
+        infopart = 1; //当前信息储存在 超级块1，下一次就要写在 超级块0
     }
-    else if(res == 0x02){ // 瓒呯骇鍧�2 鍑虹幇閿欒
+    else if(res == 0x02){ // 超级块2 出现错误
         lpm_sup = lpm_sup1;
 
-        infopart = 0; //褰撳墠淇℃伅鍌ㄥ瓨鍦� 瓒呯骇鍧�0锛屼笅涓�娆″氨瑕佸啓鍦� 瓒呯骇鍧�1
+        infopart = 0; //当前信息储存在 超级块0，下一次就要写在 超级块1
     }
-    else {  // 涓や釜瓒呯骇鍧楅兘娌℃湁閿欒
-       if(lpm_sup2->status >= lpm_sup1->status)  //status 鏄� uint16锛岀洰鍓嶆瘡娆′繚瀛樺姞 1锛屾孩鍑烘儏鍐电殑澶勭悊杩樻湭瀹炵幇
+    else {  // 两个超级块都没有错误
+       if(lpm_sup2->status >= lpm_sup1->status)  //status 是 uint16，目前每次保存加 1，溢出情况的处理还未实现
        {
            lpm_sup = lpm_sup2;
 
            rt_free(lpm_sup1);
 
-           infopart = 1; //褰撳墠淇℃伅鍌ㄥ瓨鍦� 瓒呯骇鍧�1锛屼笅涓�娆″氨瑕佸啓鍦� 瓒呯骇鍧�0
+           infopart = 1; //当前信息储存在 超级块1，下一次就要写在 超级块0
        }
        else {
            lpm_sup = lpm_sup1;
 
            rt_free(lpm_sup2);
 
-           infopart = 0; //褰撳墠淇℃伅鍌ㄥ瓨鍦� 瓒呯骇鍧�0锛屼笅涓�娆″氨瑕佸啓鍦� 瓒呯骇鍧�1
+           infopart = 0; //当前信息储存在 超级块0，下一次就要写在 超级块1
        }
     }
 
@@ -317,7 +317,7 @@ int lpm_part_info_load(struct lpm_dev *dev)
     return RT_EOK;
 }
 
-/* 淇濆瓨鍒嗗尯淇℃伅鍒板瓨鍌ㄨ澶囦笂 */
+/* 保存分区信息到存储设备上 */
 int lpm_part_info_save(struct lpm_dev *dev)
 {
     rt_slist_t *node = RT_NULL;
@@ -327,13 +327,13 @@ int lpm_part_info_save(struct lpm_dev *dev)
 
     RT_ASSERT(dev);
 
-    lpm_sup = rt_malloc(dev->block_size);//todo 濡傛灉涓�涓猙lock 鏃犳硶瀛樺偍鏇村鐨勫垎鍖轰俊鎭�
+    lpm_sup = rt_malloc(dev->block_size);//todo 如果一个block 无法存储更多的分区信息
     if (lpm_sup == RT_NULL)
     {
         return -RT_ERROR;
     }
 
-    //璇诲彇褰撳墠鍒嗗尯鐨勪俊鎭�
+    //读取当前分区的信息
     if(dev->ops->read(dev, infopart, (uint8_t*) lpm_sup, 1) < 0)
     {
         return -RT_ERROR;
@@ -358,18 +358,18 @@ int lpm_part_info_save(struct lpm_dev *dev)
 
     lpm_sup->part_num = i;
 
-    len = sizeof(struct lpm_part_info); //璁＄畻鍗曚釜缁撴瀯浣撶殑闀垮害
+    len = sizeof(struct lpm_part_info); //计算单个结构体的长度
 
-    len = len * lpm_sup->part_num;  //璁＄畻鍑� num 涓垎鍖虹粨鏋勪綋鐨勯暱搴�
+    len = len * lpm_sup->part_num;  //计算出 num 个分区结构体的长度
 
-    //璁＄畻鍑� lpm_sup 鐨勫疄闄呴暱搴�
+    //计算出 lpm_sup 的实际长度
     len += sizeof(struct lpm_super_block); // magic_word1 + magic_word2 + lpm_ver + part_num + status
 
     lpm_sup->status += 1;
 
     lpm_sup = lpm_create_crc(lpm_sup, len);
 
-    //鍐欏叆涓嬩竴涓秴绾у潡
+    //写入下一个超级块
     if(dev->ops->write(dev, (infopart ^= 1), (uint8_t*) lpm_sup, 1) > 0)
     {
         rt_free(lpm_sup);
@@ -414,7 +414,7 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
 
     offset = lpm_part_alloc(lpm_p, size);
 
-//    lpm_part_dump(lpm_p);//鎵撳嵃 LPM 鍐呭瓨鍒嗛厤鎯呭喌
+//    lpm_part_dump(lpm_p);//打印 LPM 内存分配情况
 
     if( offset == RT_NULL)
     {
@@ -422,8 +422,8 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
         return RT_NULL;
     }
 
-    lpm_par->offset = offset; //block 鐨勫亸绉婚噺
-    lpm_par->size = size;  //offset 鏄亸绉婚噺  size 鐢宠鐨� block 鐨勬暟閲�
+    lpm_par->offset = offset; //block 的偏移量
+    lpm_par->size = size;  //offset 是偏移量  size 申请的 block 的数量
     lpm_par->dev = lpm_p;
 
     rt_slist_init(&(lpm_par->list));
@@ -538,7 +538,8 @@ int lpm_partition_delete_self(const struct lpm_partition *part)
 
     return RT_EOK;
 }
-/*鍒犻櫎 dev 涓婄殑鎵�鏈夊垎鍖�*/
+
+/*删除 dev 上的所有分区*/
 int lpm_partition_delete_all(const char *dev_name)
 {
     struct lpm_dev *lpm_p;
@@ -589,7 +590,7 @@ int lpm_partition_delete_all(const char *dev_name)
     return RT_EOK;
 }
 
-/* >4G 瀵诲潃绌洪棿锛宐lk 鐨勬蹇垫洿娓呮櫚 */
+/* >4G 寻址空间，blk 的概念更清晰 */
 struct lpm_partition *lpm_partition_find(const char *dev_name, const char *name)
 {
     struct lpm_dev *lpm_p;
@@ -611,8 +612,6 @@ struct lpm_partition *lpm_partition_find(const char *dev_name, const char *name)
         {
             if (rt_strncmp(lpm_par->name, name, LPM_NAME_MAX) == 0)
             {
-//                rt_kprintf("find partition name is %s\r\n", name);
-
                 return lpm_par;
             }
         }
@@ -623,7 +622,7 @@ struct lpm_partition *lpm_partition_find(const char *dev_name, const char *name)
 
 int lpm_partition_read(const struct lpm_partition *part, uint32_t sector_no, uint8_t *buf, size_t size)
 {
-    //鐢ㄦ埛浼犻�掕繘鏉ョ殑鏄� sector_num 锛屼絾鏄� part->offset 鐨勫亸绉婚噺鏄� block,闇�瑕佽绠�  block 涓� sector 鐨勬瘮渚嬪叧绯�
+    //用户传递进来的是 sector_num ，但是 part->offset 的偏移量是 block,需要计算  block 与 sector 的比例关系
     uint32_t cur_offset;
     uint32_t i;
 
@@ -632,12 +631,12 @@ int lpm_partition_read(const struct lpm_partition *part, uint32_t sector_no, uin
     RT_ASSERT(part->dev->ops);
     RT_ASSERT(part->dev->ops->read);
 
-    //璁＄畻褰撳墠 block 璁惧 block 涓� sector 鐨勫叧绯�
+    //计算当前 block 设备 block 与 sector 的关系
     i = ((part->dev->block_size) / (part->dev->sector_count));
 
     cur_offset = (part->offset) * i + sector_no;
 
-    return part->dev->ops->read(part->dev, cur_offset, buf, size); //浼犻�掕繘鍘诲崟浣嶄篃鏄� sector
+    return part->dev->ops->read(part->dev, cur_offset, buf, size); //传递进去单位也是 sector
 }
 
 int lpm_partition_write(const struct lpm_partition *part, uint32_t sector_no, const uint8_t *buf, size_t size)
