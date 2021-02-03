@@ -12,7 +12,7 @@
 
 #define LPM_NAME_MAX 8
 
-#define LPM_VER "V1.1"
+#define LPM_VER "V0.1.1"
 
 struct lpm
 {
