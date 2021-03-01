@@ -632,7 +632,7 @@ int lpm_partition_read(const struct lpm_partition *part, uint32_t sector_no, uin
     RT_ASSERT(part->dev->ops->read);
 
     //计算当前 block 设备 block 与 sector 的关系
-    i = ((part->dev->block_size) / (part->dev->sector_count));
+    i = ((part->dev->block_size) / (part->dev->bytes_per_sector));
 
     cur_offset = (part->offset) * i + sector_no;
 
@@ -649,7 +649,7 @@ int lpm_partition_write(const struct lpm_partition *part, uint32_t sector_no, co
     RT_ASSERT(part->dev->ops);
     RT_ASSERT(part->dev->ops->write);
 
-    i = (part->dev->block_size) / (part->dev->sector_count);
+    i = (part->dev->block_size) / (part->dev->bytes_per_sector);
 
     cur_offset = (part->offset) * i + sector_no;
 
@@ -666,7 +666,7 @@ int lpm_partition_erase(const struct lpm_partition *part, uint32_t block_no, siz
     RT_ASSERT(part->dev->ops);
     RT_ASSERT(part->dev->ops->erase);
 
-    i = (part->dev->block_size) / (part->dev->sector_count);
+    i = (part->dev->block_size) / (part->dev->bytes_per_sector);
 
     cur_offset = (part->offset + block_no) * i;
 
@@ -678,7 +678,7 @@ int lpm_partition_erase_all(const struct lpm_partition *part)
     uint32_t cur_offset;
     uint32_t i;
 
-    i = (part->dev->block_size) / (part->dev->sector_count);
+    i = (part->dev->block_size) / (part->dev->bytes_per_sector);
 
     cur_offset = (part->offset) * i;
 
