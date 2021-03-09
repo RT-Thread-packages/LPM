@@ -45,7 +45,13 @@ int lpm_dev_append(struct lpm_dev *dev)
 
     dev->mem_ptr = lpm_mem;
 
-    lpm_part_alloc(dev, 2);
+    /*
+         *  不同的设备的每个块的字节数是不一样的，例如 flash 是 4096 ， sd 卡是 4096
+         *  固定每个超级块的大小是 8K 那么就需要通过     block_size 来计算设备挂载时候所申请的控件大小
+         *  超级块的个数是 2 个，所以需要申请的控件大小是 (8192*2) / block_size
+         *  那么可以知道 flash 的所需要的的大小是 4 ，sd 卡的所需要的空间大小是 32
+     */
+    lpm_part_alloc(dev, 2*(LPM_SUPER_BLK_NUM) / (dev->block_size), 0);
 
     lpm_part_info_load(dev);
 
