@@ -11,8 +11,8 @@
 #include <rtthread.h>
 
 #define LPM_NAME_MAX 8
-
-#define LPM_VER "V0.1.1"
+#define LPM_SUPER_BLK_NUM 1204 * 8 // 8K
+#define LPM_VER "V0.1.2"
 
 struct lpm
 {
@@ -63,6 +63,11 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
 int lpm_partition_delete(const char *dev_name, const char *name);
 int lpm_partition_delete_all(const char *dev_name);
 
+/* 创建匿名分区 */
+int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partition *lpm);
+/* 删除匿名分区 */
+int lpm_anonymity_delete(struct lpm_partition *lpm_par);
+
 /* >4G 寻址空间，blk 的概念更清晰 */
 struct lpm_partition * lpm_partition_find(const char *dev_name, const char *name);
 int lpm_partition_read(const struct lpm_partition *part, uint32_t sector_no, uint8_t *buf, size_t size);
@@ -95,5 +100,5 @@ int lpm_dev_nand_append(struct rt_device *dev);
 
 int lpm_part_info_load(struct lpm_dev *dev);
 
-uint32_t lpm_part_alloc(struct lpm_dev *dev, size_t size);
+uint32_t lpm_part_alloc(struct lpm_dev *dev, size_t size,uint8_t flag);
 int lpm_part_free(struct lpm_dev *dev, uint32_t addr);

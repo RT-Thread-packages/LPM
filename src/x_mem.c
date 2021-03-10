@@ -18,20 +18,6 @@
 
 #include "x_mem.h"
 
-struct heap_mem
-{
-    list_t list;
-    size_t len;
-    uint16_t used;
-    uint16_t reserved;
-};
-
-struct x_mem_tab
-{
-    struct list_node node;
-    int32_t used;
-    struct heap_mem tab[];
-};
 
 #define X_ALIGN(size, align)           (((size) + (align) - 1) & ~((align) - 1))
 #define X_ALIGN_DOWN(size, align)      ((size) & ~((align) - 1))
@@ -41,26 +27,6 @@ struct x_mem_tab
 
 #define X_MEM_TAB_CNT   (8)
 #define X_MEM_TAB_MAX   (8)
-
-#define MEM_USED_FLAG   (0x1 << 0)
-#define OBJ_USED_FLAG   (0x1 << 4)
-
-#define container_of(ptr, type, member) \
-    ((type *)((char *)(ptr) - (unsigned long)(&((type *)0)->member)))
-
-#define list_entry(node, type, member) \
-    container_of(node, type, member)
-
-#define list_for_each_entry(pos, head, member) \
-    for (pos = list_entry((head)->next, typeof(*pos), member); \
-         &pos->member != (head); \
-         pos = list_entry(pos->member.next, typeof(*pos), member))
-
-#define list_for_each_entry_safe(pos, n, head, member) \
-    for (pos = list_entry((head)->next, typeof(*pos), member), \
-         n = list_entry(pos->member.next, typeof(*pos), member); \
-         &pos->member != (head); \
-         pos = n, n = list_entry(n->member.next, typeof(*n), member))
 
 static void list_init(list_t *l)
 {
@@ -225,7 +191,7 @@ void x_destroy(x_mem_t x_mem)
     free(x_mem);
 }
 
-void *x_malloc(x_mem_t x_mem, unsigned int size)
+void *_x_malloc(x_mem_t x_mem, unsigned int size,uint8_t flag)
 {
     struct heap_mem *mem_obj, *mem_new;
     size_t ptr = 0;
@@ -257,6 +223,7 @@ void *x_malloc(x_mem_t x_mem, unsigned int size)
                 }
                 mem_new->len = size;
                 mem_new->used |= MEM_USED_FLAG;
+                mem_new->reserved = flag;
                 list_init(&mem_new->list);
 
                 mem_obj->len = mem_obj->len - size;
@@ -287,6 +254,16 @@ void *x_malloc(x_mem_t x_mem, unsigned int size)
     }
 
     return NULL;
+}
+
+void *x_malloc_flag(x_mem_t x_mem, unsigned int size, uint8_t flag)
+{
+    return _x_malloc(x_mem,size,flag);
+}
+
+void *x_malloc(x_mem_t x_mem, unsigned int size)
+{
+    return  _x_malloc(x_mem, size, 0);
 }
 
 void *x_realloc(x_mem_t x_mem, void *mem, unsigned int newsize)
@@ -445,6 +422,34 @@ void *x_free(x_mem_t x_mem, void *mem)
     }
     //failed. return mem
     return mem;
+}
+
+uint32_t x_size(x_mem_t x_mem, void *mem)
+{
+    struct heap_mem *mem_obj;
+    size_t ptr, len;
+
+    if (mem == NULL)
+        return 0;
+
+    ptr = (uint8_t *)mem - x_mem->heap_ptr;
+    if (ptr > x_mem->mem_size_aligned)
+    {
+        //failed. return null
+        return 0;
+    }
+
+    len = 0;
+
+    list_for_each_entry(mem_obj, &x_mem->head, list)
+    {
+        if(ptr == len)
+        {
+            return mem_obj->len;
+        }
+        len += mem_obj->len;
+    }
+    return 0;
 }
 
 void x_info(x_mem_t x_mem, unsigned int *total, unsigned int *used, unsigned int *max_used)
