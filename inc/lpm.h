@@ -65,8 +65,6 @@ int lpm_partition_delete_all(const char *dev_name);
 
 /* 创建匿名分区 */
 int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partition *lpm);
-/* 构造匿名分区设备 */
-int lpm_anonymity_make(const char *dev_name, uint32_t offset, struct lpm_partition *lpm);
 /* 删除匿名分区 */
 int lpm_anonymity_delete(struct lpm_partition *lpm_par);
 
