@@ -9,7 +9,7 @@
  */
 
 #include "lpm.h"
-#include <stdlib.h>
+
 extern struct lpm lpm;
 
 #include "x_mem.h"
@@ -47,9 +47,13 @@ const rt_uint8_t auchCRCLo[] = { 0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2,
         0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80, 0x40 };
 
 /* partition magic word */
-static uint32_t magic_word1 = 0x45503130;
-static uint32_t magic_word2 = 0x45503130;
-static rt_bool_t  infopart = RT_FALSE;
+#define LPM_MAGIC_WORD 0x45503130
+#define LPM_PART_FULLNAME  1
+#define LPM_PART_ANONYMITY 0
+#define LPM_SUPER_PAGE0    0
+#define LPM_SUPER_PAGE1    1
+
+static rt_bool_t  infopart = LPM_SUPER_PAGE0;
 
 struct lpm_part_info
 {
@@ -144,16 +148,20 @@ static uint16_t lpm_check_crc(struct lpm_dev *dev, uint32_t sup_blk_num)
         return -RT_ERROR;
     }
 
+    /* reads the first blk of the superblock */
     dev->ops->read(dev, sup_blk_num * (LPM_SUPER_BLK_NUM / dev->block_size), (uint8_t*)lpm_sup, 1);
+    /* Check if the maximum number of records supported by the superblock has been exceeded */
     if(lpm_sup->part_num > LPM_SUPER_BLK_NUM / sizeof(struct lpm_part_info) - 3)
     {
         return -RT_ERROR;
     }
     part_num = lpm_sup->part_num;
+    /* The total length of CRC data is not included */
     uint32_t totle_size_no_crc = sizeof(struct lpm_super_block) + sizeof(struct lpm_part_info) * part_num;
     uint32_t blk_num;
+    /* Save the blk in the superblock */
     blk_num = totle_size_no_crc / dev->block_size;
-
+    /* Check whether the BLK number exceeds the maximum number */
     if(blk_num > LPM_SUPER_BLK_NUM / dev->block_size)
     {
         return -RT_ERROR;
@@ -213,7 +221,7 @@ static int lpm_superblk_read(struct lpm_dev *dev, uint32_t blk_num,uint8_t *buf)
 /* 从存储设备上加载分区信息 */
 int lpm_part_info_load(struct lpm_dev *dev)
 {
-    struct lpm_super_block *lpm_sup, *lpm_sup1, *lpm_sup2;
+    struct lpm_super_block *lpm_sup, *lpm_sup0, *lpm_sup1;
     struct lpm_partition *lpm_par;
     struct lpm_part_info *ptr_part;
     uint8_t res = 0;
@@ -222,87 +230,86 @@ int lpm_part_info_load(struct lpm_dev *dev)
 
     RT_ASSERT(dev);
 
-    lpm_sup1 = rt_malloc(dev->block_size);
-    if (lpm_sup1 == RT_NULL)
+    lpm_sup0 = rt_malloc(dev->block_size);
+    if (lpm_sup0 == RT_NULL)
     {
         return -RT_ERROR;
     }
 
-    dev->ops->read(dev, 0, (uint8_t*)lpm_sup1, 1);
+    dev->ops->read(dev, 0, (uint8_t*)lpm_sup0, 1);
 
-    if ((lpm_sup1->magic_word1 == magic_word1) && (lpm_sup1->magic_word2 == magic_word2))
+    if ((lpm_sup0->magic_word1 == LPM_MAGIC_WORD) && (lpm_sup0->magic_word2 == LPM_MAGIC_WORD))
     {
         if(lpm_check_crc(dev, 0) != RT_EOK)
         {
             rt_kprintf("lpm_sup1 crc check failed! \r\n");
-            rt_free(lpm_sup1);
+            rt_free(lpm_sup0);
 
-            res |= 1 << 0; //bit0 置1 给一个 sup1 错误标志位
+            res |= 1 << 0; //bit0 置1 给一个 sup0 错误标志位
         }
     }
     else
     {
-        rt_free(lpm_sup1);
+        rt_free(lpm_sup0);
 
-        res |= 1 << 0; //bit0 置1 给一个 sup1 错误标志位
+        res |= 1 << 0; //bit0 置1 给一个 sup0 错误标志位
     }
 
-    lpm_sup2 = rt_malloc(dev->block_size);
-    if (lpm_sup2 == RT_NULL)
+    lpm_sup1 = rt_malloc(dev->block_size);
+    if (lpm_sup1 == RT_NULL)
     {
-        //申请不到内存
         res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
     }
     else
     {
-        dev->ops->read(dev, LPM_SUPER_BLK_NUM / dev->block_size, (uint8_t*)lpm_sup2, 1);
-        if ((lpm_sup2->magic_word1 == magic_word1) && (lpm_sup2->magic_word2 == magic_word2))
+        dev->ops->read(dev, LPM_SUPER_BLK_NUM / dev->block_size, (uint8_t*)lpm_sup1, 1);
+        if ((lpm_sup1->magic_word1 == LPM_MAGIC_WORD) && (lpm_sup1->magic_word2 == LPM_MAGIC_WORD))
         {
             if(lpm_check_crc(dev, 1) != RT_EOK)
             {
                 rt_kprintf("lpm_sup2 crc check failed! \r\n");
-                rt_free(lpm_sup2);
+                rt_free(lpm_sup1);
 
                 res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
             }
         }
         else
         {
-            rt_free(lpm_sup2);
+            rt_free(lpm_sup1);
 
             res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
         }
     }
 
-    if(res == 3)//bit0:1 都为1 就说明，超级块1和2 都没有记录分区信息
+    if(res == 3)//bit0:1 都为1 就说明，超级块0和1 都没有记录分区信息
     {
         return -RT_ERROR;
     }
-    else if(res == 0x01 ){ // 超级块1 出现错误
-        lpm_sup = lpm_sup2;
-
-        infopart = 1; //当前信息储存在 超级块1，下一次就要写在 超级块0
-    }
-    else if(res == 0x02){ // 超级块2 出现错误
+    else if(res == 0x01 ){ // 超级块0 出现错误
         lpm_sup = lpm_sup1;
 
-        infopart = 0; //当前信息储存在 超级块0，下一次就要写在 超级块1
+        infopart = LPM_SUPER_PAGE1; //当前信息储存在 超级块1，下一次就要写在 超级块0
+    }
+    else if(res == 0x02){ // 超级块2 出现错误
+        lpm_sup = lpm_sup0;
+
+        infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
     }
     else {
-       if(lpm_sup2->status >= lpm_sup1->status)  //status 是 uint32，目前每次保存加 1，溢出情况的处理还未实现
+       if(lpm_sup1->status >= lpm_sup0->status)  //status 是 uint32，目前每次保存加 1，溢出情况的处理还未实现
        {
-           lpm_sup = lpm_sup2;
+           lpm_sup = lpm_sup1;
+
+           rt_free(lpm_sup0);
+
+           infopart = LPM_SUPER_PAGE1; //当前信息储存在 超级块1，下一次就要写在 超级块0
+       }
+       else {
+           lpm_sup = lpm_sup0;
 
            rt_free(lpm_sup1);
 
-           infopart = 1; //当前信息储存在 超级块1，下一次就要写在 超级块0
-       }
-       else {
-           lpm_sup = lpm_sup1;
-
-           rt_free(lpm_sup2);
-
-           infopart = 0; //当前信息储存在 超级块0，下一次就要写在 超级块1
+           infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
        }
     }
 
@@ -312,7 +319,7 @@ int lpm_part_info_load(struct lpm_dev *dev)
     }
     else
     {
-        int pos = (LPM_SUPER_BLK_NUM * 2) / dev->block_size;  // 这里的 pos 就不是  2  了 (LPM_SUPER_BLK_NUM * 2) / dev->block_size
+        int pos = (LPM_SUPER_BLK_NUM * 2) / dev->block_size; // pos 从 2 个超级块之后开始计算
         part_num = lpm_sup->part_num;
         ptr_part = lpm_sup->part_info;
 
@@ -333,24 +340,24 @@ int lpm_part_info_load(struct lpm_dev *dev)
 
             if(lpm_par->name[0] != 0)
             {
-                if(pos != lpm_par->offset)
+                if(pos != lpm_par->offset) // 如果偏移不是存储设备的地址，则申请空间临时占住这部分空间
                 {
-                    lpm_part_alloc(dev,lpm_par->offset - pos,1);
+                    lpm_part_alloc(dev,lpm_par->offset - pos,LPM_PART_FULLNAME);
                     pos = lpm_par->offset;
                 }
-                lpm_part_alloc(dev,lpm_par->size,1);
+                lpm_part_alloc(dev,lpm_par->size,LPM_PART_FULLNAME);
                 pos += lpm_par->size;
 
-                rt_slist_append(&(dev->part_list), &(lpm_par->list));
+                rt_slist_append(&(dev->part_list), &(lpm_par->list));// 有名分区插入链表
             }
             else
             {
-                if(pos != lpm_par->offset)
+                if(pos != lpm_par->offset)// 如果偏移不是存储设备的地址，则申请空间临时占住这部分空间
                 {
-                    lpm_part_alloc(dev,lpm_par->offset - pos,0);
+                    lpm_part_alloc(dev,lpm_par->offset - pos, LPM_PART_ANONYMITY);
                     pos = lpm_par->offset;
                 }
-                lpm_part_alloc(dev,lpm_par->size,0);
+                lpm_part_alloc(dev,lpm_par->size, LPM_PART_ANONYMITY);
                 pos += lpm_par->size;
 
                 rt_free(lpm_par);// 如果是匿名分区，那么就不需要插入到链表这里申请的内存就可以释放了
@@ -377,7 +384,7 @@ int lpm_part_info_load(struct lpm_dev *dev)
         {
             if(pos != ptr_part->block_no)
             {
-                lpm_part_free(dev,pos);
+                lpm_part_free(dev,pos); // 释放临时占住的空间
                 pos = ptr_part->block_no;
             }
             pos += ptr_part->size;
@@ -393,7 +400,6 @@ int lpm_part_info_load(struct lpm_dev *dev)
             }
             ptr_part++;
         }
-        lpm_part_dump(dev);
     }
 
     rt_free(lpm_sup);
@@ -407,7 +413,7 @@ static int lpm_superblk_write(struct lpm_dev *dev, uint32_t blk_num,uint8_t *buf
     uint8_t info_part = 1;
 
     if (infopart) {
-        info_part = 0;
+        info_part = LPM_SUPER_PAGE0;
     }
 
     num_cur = (LPM_SUPER_BLK_NUM / (dev->block_size)) * info_part + blk_num;
@@ -427,7 +433,7 @@ int lpm_part_info_save(struct lpm_dev *dev)
     size_t ptr = 0;
     uint32_t blk_num = 0;
     uint16_t crc = 0xFFFF;
-    uint8_t crc_flag = 1;
+    uint8_t crc_flag = RT_TRUE;
 
     RT_ASSERT(dev);
 
@@ -437,8 +443,8 @@ int lpm_part_info_save(struct lpm_dev *dev)
         return -RT_ERROR;
     }
 
+    /* Count the number of partitions */
     struct heap_mem *mem_obj;
-
     list_for_each_entry(mem_obj, &((x_mem_t)dev->mem_ptr)->head, list)
     {
         if(i == 0)
@@ -465,8 +471,8 @@ int lpm_part_info_save(struct lpm_dev *dev)
     }
 
     /* 更新头部状态  */
-    lpm_sup->magic_word1 = magic_word1;
-    lpm_sup->magic_word2 = magic_word2;
+    lpm_sup->magic_word1 = LPM_MAGIC_WORD;
+    lpm_sup->magic_word2 = LPM_MAGIC_WORD;
     rt_memcpy(lpm_sup->lpm_ver,LPM_VER,LPM_NAME_MAX);
     lpm_sup->part_num = part_num; // 更新超级块的 分区数量
     lpm_sup->status += 1; // 更新 status 状态
@@ -478,6 +484,7 @@ int lpm_part_info_save(struct lpm_dev *dev)
     ptr = 0;
     i = 0;
 
+    /* 遍历 x_mem 的空间使用情况，来查找出那些地方存放了分区信息 */
     list_for_each_entry(mem_obj, &((x_mem_t)dev->mem_ptr)->head, list)
     {
         if(i == 0)
@@ -487,12 +494,13 @@ int lpm_part_info_save(struct lpm_dev *dev)
             continue;
         }
 
+        /* 只有被使用的空间里面才保存了分区信息 */
         if(mem_obj->used & MEM_USED_FLAG)
         {
             ptr_part->size = mem_obj->len;
             ptr_part->block_no = ptr;
             ptr_part->name[0] = 0;
-            if (mem_obj->reserved == 0x01)
+            if (mem_obj->reserved == LPM_PART_FULLNAME) // 有名字的分区
             {
                 rt_slist_for_each(node, &(dev->part_list))
                 {
@@ -507,9 +515,9 @@ int lpm_part_info_save(struct lpm_dev *dev)
                 }
             }
 
+            /* 判断一个 blk 是够已经写满了 */
             if((uint32_t)ptr_part + sizeof(struct lpm_part_info)- (uint32_t)lpm_sup >= dev->block_size)
             {
-                /* todo crc 累加  */
                 crc = lpm_create_crc((uint8_t*)lpm_sup, dev->block_size, crc); // 计算 CRC
 
                 lpm_superblk_write(dev, blk_num, (uint8_t *)lpm_sup);
@@ -529,18 +537,18 @@ int lpm_part_info_save(struct lpm_dev *dev)
         ptr += mem_obj->len;
     }
 
+    /* 如果还有一个 blk 没有被写满 */
     if((uint32_t)ptr_part - (uint32_t)lpm_sup != 0)
     {
-        /* todo crc 累加  */
         crc = lpm_create_crc((uint8_t*)lpm_sup, (uint32_t)ptr_part - (uint32_t)lpm_sup, crc);// 计算 CRC
 
         *((uint16_t*)ptr_part) = crc; // ptr_part 的地址就是已经偏移的地址，直接写入 CRC 的值
         lpm_superblk_write(dev, blk_num, (uint8_t *)lpm_sup);
 
-        crc_flag = 0;// 设置一个标志位，这个标志位用来表示 CRC 已经写入了，后面就不需要在写
+        crc_flag = RT_FALSE;// 设置一个标志位，这个标志位用来表示 CRC 已经写入了，后面就不需要在写
     }
 
-    /*  todo 写 crc 到新的blk */
+    /* 写 crc 到新的blk */
     if (crc_flag) { // 如果执行到这里还未写入 CRC ，则需要在下一个块来写入 CRC
         rt_memset(lpm_sup, 0, sizeof(dev->block_size));
         *((uint16_t*) lpm_sup) = crc;
@@ -552,9 +560,9 @@ int lpm_part_info_save(struct lpm_dev *dev)
 
     // 切换块
     if (infopart) {
-        infopart = RT_FALSE;
+        infopart = LPM_SUPER_PAGE0;
     }else {
-        infopart = RT_TRUE;
+        infopart = LPM_SUPER_PAGE1;
     }
 
     return RT_EOK;
@@ -589,9 +597,7 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
 
     rt_strncpy(lpm_par->name, name, RT_NAME_MAX);
 
-    offset = lpm_part_alloc(lpm_p, size,1);
-
-//    lpm_part_dump(lpm_p);
+    offset = lpm_part_alloc(lpm_p, size, LPM_PART_FULLNAME);
 
     if( offset == RT_NULL)
     {
@@ -654,7 +660,7 @@ int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partiti
         return -RT_ERROR;
     }
 
-    offset = lpm_part_alloc(lpm_p, size,0);
+    offset = lpm_part_alloc(lpm_p, size, LPM_PART_ANONYMITY);
     if(offset == RT_NULL){
         rt_kprintf("alloc space failed \n");
         return -RT_ERROR;
@@ -792,7 +798,7 @@ int lpm_partition_delete_all(const char *dev_name)
 
     lpm_p->mem_ptr = lpm_mem;
 
-    lpm_part_alloc(lpm_p, 2*(LPM_SUPER_BLK_NUM) / (lpm_p->block_size), 0);
+    lpm_part_alloc(lpm_p, 2*(LPM_SUPER_BLK_NUM) / (lpm_p->block_size), LPM_PART_ANONYMITY);
 
     rt_slist_for_each(dev_node, &(lpm.device_list))
     {
@@ -979,7 +985,7 @@ char* lpm_get_version(struct lpm_dev *dev)
 
     dev->ops->read(dev, 0, (uint8_t*)lpm_sup1, 1);
 
-    if ((lpm_sup1->magic_word1 == magic_word1) && (lpm_sup1->magic_word2 == magic_word2))
+    if ((lpm_sup1->magic_word1 == LPM_MAGIC_WORD) && (lpm_sup1->magic_word2 == LPM_MAGIC_WORD))
     {
         if(lpm_check_crc(dev, 0) != RT_EOK)
         {
@@ -1005,7 +1011,7 @@ char* lpm_get_version(struct lpm_dev *dev)
     {
         dev->ops->read(dev, 1, (uint8_t*)lpm_sup2, 1);
 
-        if ((lpm_sup2->magic_word1 == magic_word1) && (lpm_sup2->magic_word2 == magic_word2))
+        if ((lpm_sup2->magic_word1 == LPM_MAGIC_WORD) && (lpm_sup2->magic_word2 == LPM_MAGIC_WORD))
         {
             if(lpm_check_crc(dev, 1) != RT_EOK)
             {
