@@ -10,6 +10,10 @@
 
 #include "lpm.h"
 
+#define DBG_TAG               "lpm"
+#define DBG_LVL               DBG_LOG
+#include <rtdbg.h>
+
 extern struct lpm lpm;
 
 #include "x_mem.h"
@@ -96,7 +100,10 @@ uint32_t lpm_free(const char *dev_name)
     dev = lpm_dev_find(dev_name);
 
     if(dev == RT_NULL)
-        return -RT_ERROR;
+    {
+        LOG_W("dev [%s] not finded!", dev_name);
+        return 0;
+    }
 
     x_info(dev->mem_ptr, &total, &used, RT_NULL);
 
@@ -131,7 +138,7 @@ static uint16_t lpm_create_crc(uint8_t *lpm_sup, uint32_t len,uint16_t crc)
     return result;
 }
 
-static uint16_t lpm_check_crc(struct lpm_dev *dev, uint32_t sup_blk_num)
+static rt_err_t lpm_check_crc(struct lpm_dev *dev, uint32_t sup_blk_num)
 {
     struct lpm_super_block *lpm_sup;
     uint16_t crc = 0xFFFF;
