@@ -114,3 +114,12 @@ int lpm_dev_erase_all(const struct lpm_dev *dev)
 {
     return RT_EOK;
 }
+
+int lpm_dev_control(struct lpm_dev *dev, int cmd, void *arg)
+{
+    RT_ASSERT(dev);
+    RT_ASSERT(dev->ops);
+    RT_ASSERT(dev->ops->control);
+    
+    return dev->ops->control(dev, cmd, arg);
+}

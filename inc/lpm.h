@@ -37,6 +37,7 @@ struct lpm_dev /* 底层存储设备结构 */
     rt_uint32_t sector_count; /**< count of sectors */
     rt_uint32_t bytes_per_sector; /**< number of bytes per sector */
     rt_uint32_t block_size; /**< number of bytes to erase one block */
+    rt_uint32_t phy_start_addr; /**< physical start address */
     rt_slist_t dev_list;
     rt_slist_t part_list;
     void *mem_ptr;
@@ -48,6 +49,7 @@ struct lpm_dev_ops /* 操作接口，待定 */
     int (*erase)(struct lpm_dev *dev, uint32_t block_no, size_t num);
     int (*read)(struct lpm_dev *dev, uint32_t sector_no, uint8_t *buf, size_t size);
     int (*write)(struct lpm_dev *dev, uint32_t sector_no, const uint8_t *buf, size_t size);
+    int (*control)(struct lpm_dev *dev, int cmd, void *arg);
 };
 
 struct rt_lpm_device
@@ -92,6 +94,7 @@ int lpm_dev_read(struct lpm_dev *dev, uint32_t sector_no, uint8_t *buf, size_t s
 int lpm_dev_write(struct lpm_dev *dev, uint32_t sector_no, const uint8_t *buf, size_t size);
 int lpm_dev_erase(const struct lpm_dev *dev, uint32_t block_no, size_t num);
 int lpm_dev_erase_all(const struct lpm_dev *dev);
+int lpm_dev_control(struct lpm_dev *dev, int cmd, void *arg);
 
 /* 底层接口 */
 int lpm_dev_append(struct lpm_dev *dev);

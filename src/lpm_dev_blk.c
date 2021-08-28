@@ -12,6 +12,10 @@
 #include <string.h>
 #include "lpm.h"
 
+#ifndef RT_FIOGETXIPADDR
+    #define RT_FIOGETXIPADDR 0x52540001U
+#endif
+
 int lpm_blk_dev_init(struct lpm_dev *dev)
 {
     RT_ASSERT(dev);
@@ -48,6 +52,17 @@ int lpm_blk_dev_erase(struct lpm_dev *dev, uint32_t block_no, size_t num)
     return RT_EOK;
 }
 
+int lpm_blk_dev_control(struct lpm_dev *dev, int cmd, void *arg)
+{
+    rt_device_t device;
+    
+    RT_ASSERT(dev);
+    
+    device = ((struct rt_lpm_device*) dev)->rt_device;
+
+    return rt_device_control(device, cmd, arg);
+}
+
 extern struct lpm lpm;
 
 static struct lpm_dev_ops lpm_dev_ops = {
@@ -55,6 +70,7 @@ static struct lpm_dev_ops lpm_dev_ops = {
         .erase = lpm_blk_dev_erase,
         .read  = lpm_blk_dev_read,
         .write = lpm_blk_dev_write,
+        .control = lpm_blk_dev_control
 };
 
 int lpm_dev_blk_append(struct rt_device *dev)
@@ -62,6 +78,7 @@ int lpm_dev_blk_append(struct rt_device *dev)
     rt_err_t result;
     struct rt_device_blk_geometry geometry;
     struct lpm_dev *lpm_blk_dev;
+    uint32_t phy_start_addr;
 
     lpm_blk_dev = rt_malloc(sizeof(struct rt_lpm_device));
     if (lpm_blk_dev == RT_NULL)
@@ -87,6 +104,14 @@ int lpm_dev_blk_append(struct rt_device *dev)
         rt_kprintf("sector  size : %d byte\r\n", geometry.bytes_per_sector);
         rt_kprintf("sector count : %d \r\n",     geometry.sector_count);
         rt_kprintf("block   size : %d byte\r\n", geometry.block_size);
+
+        result = rt_device_control(dev, RT_FIOGETXIPADDR, &phy_start_addr);
+        if (result != RT_EOK)
+        {
+            rt_kprintf("device : cmd RT_FIOGETXIPADDR failed.\r\n");
+            return result;
+        }
+        rt_kprintf("block   addr : 0x%X \r\n", phy_start_addr);
     }
 
     rt_memset(lpm_blk_dev->name, 0, LPM_NAME_MAX);
@@ -95,6 +120,7 @@ int lpm_dev_blk_append(struct rt_device *dev)
     lpm_blk_dev->sector_count = geometry.sector_count;
     lpm_blk_dev->bytes_per_sector = geometry.bytes_per_sector;
     lpm_blk_dev->block_size = geometry.block_size;
+    lpm_blk_dev->phy_start_addr = phy_start_addr;
     lpm_blk_dev->dev_list.next = RT_NULL;
     lpm_blk_dev->part_list.next = RT_NULL;
     lpm_blk_dev->ops = &lpm_dev_ops;
@@ -163,6 +189,10 @@ static rt_err_t lpm_blk_control(rt_device_t dev, int cmd, void *args)
     else if (cmd == RT_DEVICE_CTRL_BLK_ERASE)
     {
         //todo
+    }
+    else if (cmd == RT_FIOGETXIPADDR)
+    {
+        *(uint32_t *) args = ((struct lpm_partition*)(dev->user_data))->dev->phy_start_addr;
     }
 
     return RT_EOK;
