@@ -673,7 +673,7 @@ int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partiti
         return -RT_ERROR;
     }
 
-    rt_kprintf("offset size 0x %x\r\n",offset);
+    rt_kprintf("offset size 0x %x, %d\r\n",offset, size);
 
     lpm_par->name[0] = 0;
     lpm_par->dev = lpm_p;
