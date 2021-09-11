@@ -10,9 +10,9 @@
 
 #include <rtthread.h>
 
-#define LPM_NAME_MAX 8
-#define LPM_SUPER_BLK_NUM 1204 * 8 // 8K
-#define LPM_VER "V0.1.2"
+#define LPM_NAME_MAX        8
+#define LPM_SUPER_BLK_NUM   (1024 * 8) // 8K
+#define LPM_VER             "V0.1.2"
 
 struct lpm
 {
