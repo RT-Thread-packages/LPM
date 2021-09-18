@@ -813,21 +813,24 @@ int lpm_partition_delete_all(const char *dev_name)
 
         if (lpm_p != RT_NULL)
         {
-            rt_slist_for_each(par_node, &(lpm_p->part_list))
+            if (rt_strncmp(lpm_p->name, dev_name, LPM_NAME_MAX) == 0)
             {
-                lpm_par = rt_slist_entry(par_node, struct lpm_partition, list);
-
-                if (lpm_par != RT_NULL)
+                rt_slist_for_each(par_node, &(lpm_p->part_list))
                 {
-                    rt_kprintf("delete lpm_dev name is %s  partition name is %s\r\n", lpm_p->name, lpm_par->name);
+                    lpm_par = rt_slist_entry(par_node, struct lpm_partition, list);
 
-                    rt_slist_remove(&(lpm_p->part_list), &(lpm_par->list));
+                    if (lpm_par != RT_NULL)
+                    {
+                        rt_kprintf("delete lpm_dev name is %s  partition name is %s\r\n", lpm_p->name, lpm_par->name);
 
-                    rt_free(lpm_par);
-                }
-                else
-                {
-                    return -RT_ERROR;
+                        rt_slist_remove(&(lpm_p->part_list), &(lpm_par->list));
+
+                        rt_free(lpm_par);
+                    }
+                    else
+                    {
+                        return -RT_ERROR;
+                    }
                 }
             }
         }
