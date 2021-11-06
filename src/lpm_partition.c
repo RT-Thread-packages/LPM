@@ -11,7 +11,7 @@
 #include "lpm.h"
 
 #define DBG_TAG               "lpm"
-#define DBG_LVL               DBG_LOG
+#define DBG_LVL               DBG_INFO
 #include <rtdbg.h>
 
 extern struct lpm lpm;
@@ -225,12 +225,19 @@ static int lpm_superblk_read(struct lpm_dev *dev, uint32_t blk_num,uint8_t *buf)
     return dev->ops->read(dev, num_cur, buf, 1);
 }
 
+/* 获取当前超级块 */
+uint8_t lpm_part_super_page_get(void)
+{
+    return infopart;
+}
+
 /* 从存储设备上加载分区信息 */
-int lpm_part_info_load(struct lpm_dev *dev)
+int lpm_part_info_load(struct lpm_dev *dev, rt_bool_t recovery)
 {
     struct lpm_super_block *lpm_sup, *lpm_sup0, *lpm_sup1;
     struct lpm_partition *lpm_par;
     struct lpm_part_info *ptr_part;
+    x_mem_t lpm_mem;
     uint8_t res = 0;
     uint32_t blk_num = 0;
     uint32_t part_num = 0;
@@ -249,7 +256,7 @@ int lpm_part_info_load(struct lpm_dev *dev)
     {
         if(lpm_check_crc(dev, 0) != RT_EOK)
         {
-            rt_kprintf("lpm_sup1 crc check failed! \r\n");
+            LOG_W("lpm_sup1 crc check failed!");
             rt_free(lpm_sup0);
 
             res |= 1 << 0; //bit0 置1 给一个 sup0 错误标志位
@@ -274,7 +281,7 @@ int lpm_part_info_load(struct lpm_dev *dev)
         {
             if(lpm_check_crc(dev, 1) != RT_EOK)
             {
-                rt_kprintf("lpm_sup2 crc check failed! \r\n");
+                LOG_W("lpm_sup2 crc check failed!");
                 rt_free(lpm_sup1);
 
                 res |= 1 << 1; //bit1 置1 给一个 sup2 错误标志位
@@ -303,32 +310,70 @@ int lpm_part_info_load(struct lpm_dev *dev)
         infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
     }
     else {
-       if(lpm_sup1->status >= lpm_sup0->status)  //status 是 uint32，目前每次保存加 1，溢出情况的处理还未实现
-       {
-           lpm_sup = lpm_sup1;
+        if(lpm_sup1->status >= lpm_sup0->status)  //status 是 uint32，目前每次保存加 1，溢出情况的处理还未实现
+        {
+            if(recovery) {
+                lpm_sup = lpm_sup0; // 使用旧的超级块
+                rt_free(lpm_sup1);
 
-           rt_free(lpm_sup0);
+                infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
+            } else {
+                lpm_sup = lpm_sup1; // 使用新的超级块
+                rt_free(lpm_sup0);
 
-           infopart = LPM_SUPER_PAGE1; //当前信息储存在 超级块1，下一次就要写在 超级块0
-       }
-       else {
-           lpm_sup = lpm_sup0;
+                infopart = LPM_SUPER_PAGE1; //当前信息储存在 超级块1，下一次就要写在 超级块0
+            }
+        }
+        else {
+            if(recovery) {
+                lpm_sup = lpm_sup1; // 使用旧的超级块
+                rt_free(lpm_sup0);
 
-           rt_free(lpm_sup1);
+                infopart = LPM_SUPER_PAGE1; //当前信息储存在 超级块1，下一次就要写在 超级块0
+            } else {
+                lpm_sup = lpm_sup0; // 使用新的超级块
+                rt_free(lpm_sup1);
 
-           infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
-       }
+                infopart = LPM_SUPER_PAGE0; //当前信息储存在 超级块0，下一次就要写在 超级块1
+            }            
+        }
     }
 
     if (lpm_sup->part_num == 0)
     {
-        rt_kprintf("Not found LPM partition, Please create first LPM partition\r\n");
+        LOG_W("Not found LPM partition, Please create first LPM partition.");
     }
     else
     {
         int pos = (LPM_SUPER_BLK_NUM * 2) / dev->block_size; // pos 从 2 个超级块之后开始计算
         part_num = lpm_sup->part_num;
         ptr_part = lpm_sup->part_info;
+
+        if (dev->part_list.next != RT_NULL)
+        {
+            // 清空内存链表
+            x_destroy((x_mem_t)(dev->mem_ptr));
+            lpm_mem = x_create((void *) 0, (void *) dev->sector_count, 1); //todo 这里是因为 block 的大小与 sector 一致
+            if (lpm_mem == RT_NULL)
+            {
+                return -RT_ERROR;
+            }
+            dev->mem_ptr = lpm_mem;
+            lpm_part_alloc(dev, 2*(LPM_SUPER_BLK_NUM) / (dev->block_size), 0);
+
+            // 清空有名分区链表
+            rt_slist_t *node = RT_NULL;
+            rt_slist_for_each(node, &(dev->part_list))
+            {
+                lpm_par = rt_slist_entry(node, struct lpm_partition, list);
+                if (lpm_par != RT_NULL)
+                {
+                    rt_slist_remove(&(dev->part_list), &(lpm_par->list));
+                    rt_free(lpm_par);
+                }
+            }
+            dev->part_list.next = RT_NULL;
+        }
 
         for (int i = 0; i < part_num; i++)
         {
@@ -584,7 +629,7 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
 
     if(name[0] != 0 && lpm_partition_find(dev_name, name) != RT_NULL)
     {
-        rt_kprintf("The partition cannot be created,because the %s already exists.\n",name);
+        LOG_W("The partition cannot be created,because the %s already exists.",name);
         return RT_NULL;
     }
 
@@ -592,7 +637,7 @@ struct lpm_partition *lpm_partition_create(const char *dev_name, const char *nam
     lpm_p = lpm_dev_find(dev_name);
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name \n", dev_name);
+        LOG_W("not find dev_name!", dev_name);
         return RT_NULL;
     }
 
@@ -663,24 +708,24 @@ int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partiti
     lpm_p = lpm_dev_find(dev_name);
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name \n", dev_name);
+        LOG_W("not find dev_name!", dev_name);
         return -RT_ERROR;
     }
 
     offset = lpm_part_alloc(lpm_p, size, LPM_PART_ANONYMITY);
     if(offset == RT_NULL){
-        rt_kprintf("alloc space failed \n");
+        LOG_W("alloc size %d space failed!", size);
         return -RT_ERROR;
     }
 
-    rt_kprintf("offset size 0x %x, %d\r\n",offset, size);
+    LOG_D("offset size 0x %x, %d",offset, size);
 
     lpm_par->name[0] = 0;
     lpm_par->dev = lpm_p;
     lpm_par->offset = offset;
     lpm_par->size = size;
 
-    lpm_part_info_save(lpm_p);
+//    lpm_part_info_save(lpm_p);
 
     return RT_EOK;
 }
@@ -691,7 +736,7 @@ int lpm_anonymity_delete(struct lpm_partition *lpm_par)
 
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name \n");
+        LOG_W("not find dev_name!");
         return -RT_ERROR;
     }
 
@@ -712,7 +757,7 @@ int lpm_partition_delete(const char *dev_name, const char *name)
     lpm_p = lpm_dev_find(dev_name);
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name \n", dev_name);
+        LOG_W("not find dev_name!", dev_name);
         return -RT_ERROR;
     }
 
@@ -724,7 +769,7 @@ int lpm_partition_delete(const char *dev_name, const char *name)
         {
             if (rt_strncmp(lpm_par->name, name, LPM_NAME_MAX) == 0)
             {
-                rt_kprintf("delete lpm_dev name is %s  partition name is %s\r\n", lpm_p->name, lpm_par->name);
+                LOG_D("delete lpm_dev name is %s  partition name is %s.", lpm_p->name, lpm_par->name);
                 lpm_part_free(lpm_p, lpm_par->offset);
                 rt_slist_remove(&(lpm_p->part_list), &(lpm_par->list));
 
@@ -758,7 +803,7 @@ int lpm_partition_delete_self(const struct lpm_partition *part)
         {
             if (lpm_par->offset == part->offset)
             {
-                rt_kprintf("delete lpm_dev name is %s  partition offset is %d\r\n", lpm_p->name, lpm_par->offset);
+                LOG_D("delete lpm_dev name is %s  partition offset is %d.", lpm_p->name, lpm_par->offset);
                 lpm_part_free(lpm_p, lpm_par->offset);
                 rt_slist_remove(&(lpm_p->part_list), &(lpm_par->list));
 
@@ -789,7 +834,7 @@ int lpm_partition_delete_all(const char *dev_name)
     lpm_p = lpm_dev_find(dev_name);
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name \n", dev_name);
+        LOG_W("not find dev_name!", dev_name);
         return -RT_ERROR;
     }
 
@@ -821,7 +866,7 @@ int lpm_partition_delete_all(const char *dev_name)
 
                     if (lpm_par != RT_NULL)
                     {
-                        rt_kprintf("delete lpm_dev name is %s  partition name is %s\r\n", lpm_p->name, lpm_par->name);
+                        LOG_D("delete lpm_dev name is %s  partition name is %s.", lpm_p->name, lpm_par->name);
 
                         rt_slist_remove(&(lpm_p->part_list), &(lpm_par->list));
 
@@ -855,7 +900,7 @@ struct lpm_partition *lpm_partition_find(const char *dev_name, const char *name)
     lpm_p = lpm_dev_find(dev_name);
     if (lpm_p == RT_NULL)
     {
-        rt_kprintf("not find dev_name %s\n", dev_name);
+        LOG_W("not find dev_name %s!", dev_name);
         return RT_NULL;
     }
 

@@ -78,7 +78,7 @@ int lpm_dev_blk_append(struct rt_device *dev)
     rt_err_t result;
     struct rt_device_blk_geometry geometry;
     struct lpm_dev *lpm_blk_dev;
-    uint32_t phy_start_addr;
+    uint32_t phy_start_addr = 0xFFFFFFFF;
 
     lpm_blk_dev = rt_malloc(sizeof(struct rt_lpm_device));
     if (lpm_blk_dev == RT_NULL)
@@ -124,6 +124,7 @@ int lpm_dev_blk_append(struct rt_device *dev)
     lpm_blk_dev->dev_list.next = RT_NULL;
     lpm_blk_dev->part_list.next = RT_NULL;
     lpm_blk_dev->ops = &lpm_dev_ops;
+    lpm_blk_dev->mem_ptr = RT_NULL;
 
     ((struct rt_lpm_device*) lpm_blk_dev)->rt_device = dev;
 

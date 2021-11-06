@@ -53,7 +53,7 @@ int lpm_dev_append(struct lpm_dev *dev)
      */
     lpm_part_alloc(dev, 2*(LPM_SUPER_BLK_NUM) / (dev->block_size), 0);
 
-    lpm_part_info_load(dev);
+    lpm_part_info_load(dev, RT_FALSE);
 
     rt_slist_insert(&(lpm.device_list), &(dev->dev_list));
 
