@@ -725,8 +725,6 @@ int lpm_anonymity_create(const char *dev_name, uint32_t size, struct lpm_partiti
     lpm_par->offset = offset;
     lpm_par->size = size;
 
-//    lpm_part_info_save(lpm_p);
-
     return RT_EOK;
 }
 
