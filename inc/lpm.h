@@ -101,7 +101,9 @@ int lpm_dev_append(struct lpm_dev *dev);
 int lpm_dev_blk_append(struct rt_device *dev);
 int lpm_dev_nand_append(struct rt_device *dev);
 
-int lpm_part_info_load(struct lpm_dev *dev);
+int lpm_part_info_load(struct lpm_dev *dev, rt_bool_t recovery);
+int lpm_part_info_save(struct lpm_dev *dev);
+uint8_t lpm_part_super_page_get(void);
 
 uint32_t lpm_part_alloc(struct lpm_dev *dev, size_t size,uint8_t flag);
 int lpm_part_free(struct lpm_dev *dev, uint32_t addr);
