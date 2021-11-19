@@ -199,6 +199,18 @@ static rt_err_t lpm_blk_control(rt_device_t dev, int cmd, void *args)
     return RT_EOK;
 }
 
+#ifdef RT_USING_DEVICE_OPS
+const static struct rt_device_ops lpm_dev_init_ops = 
+{
+    .init = RT_NULL,
+    .open = RT_NULL,
+    .close = RT_NULL,
+    .read = lpm_blk_read,
+    .write = lpm_blk_write,
+    .control = lpm_blk_control
+};
+#endif
+
 struct rt_device *lpm_blk_device_create(const char *dev_name, const char *parition_name)
 {
     struct lpm_partition *lpm_par;
@@ -219,12 +231,16 @@ struct rt_device *lpm_blk_device_create(const char *dev_name, const char *pariti
 
     rt_dev->type = RT_Device_Class_Block;
 
+#ifdef RT_USING_DEVICE_OPS
+    rt_dev->ops = &lpm_dev_init_ops;
+#else
     rt_dev->init    = RT_NULL;
     rt_dev->open    = RT_NULL;
     rt_dev->close   = RT_NULL;
     rt_dev->read    = lpm_blk_read;
     rt_dev->write   = lpm_blk_write;
     rt_dev->control = lpm_blk_control;
+#endif
 
     rt_dev->user_data = lpm_par;
 
